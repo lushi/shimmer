@@ -1,3 +1,5 @@
+require 'minitest/autorun'
+
 class Env
   attr_accessor :context, :parent
   def initialize(parent=nil)
@@ -97,5 +99,39 @@ class Shimmer
     rescue ArgumentError
       token.to_sym
     end
+  end
+end
+
+class ShimmerTest < MiniTest::Unit::TestCase
+  def test_define_var_num_1
+    program = "(define x 4)"
+    s = Shimmer.new
+    assert_equal(4, s.evaluate(s.parse(program)))
+  end
+
+  def test_define_var_num_2
+    program = "(define x 4)"
+    s = Shimmer.new
+    s.evaluate(s.parse(program))
+    input = "x"
+    assert_equal(4, s.evaluate(s.parse(input)))
+  end
+
+  def test_quote
+    program = "(quote (x + y))"
+    s = Shimmer.new
+    assert_equal("(x + y)", s.evaluate(s.parse(program)))
+  end
+
+  def test_undefined_variable
+    program = "x"
+    s = Shimmer.new
+    assert_nil(s.evaluate(s.parse(program)))
+  end
+
+  def test_string_literal
+    program = "8"
+    s = Shimmer.new
+    assert_equal(8, s.evaluate(s.parse(program)))
   end
 end
