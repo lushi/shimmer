@@ -1,34 +1,68 @@
+class Env
+  attr_accessor :context, :parent
+  def initialize(parent=nil)
+    @parent = parent
+    @context = {}
+  end
+end
+
 class Shimmer
+  attr_accessor :global_env
   def initialize
-    @env = {}
+    @global_env = Env.new
+  end
+
+  def to_scheme(exp)
+    '(' + exp.join(" ") + ')'
   end
 
   def repl
     while true
       print 'shimmer> '
-      val = eval(parse(gets.chomp))
-      puts "=> #{val.nil? ? 'null' : @env.values[0]}"
+      val = evaluate(parse(gets.chomp))
+      puts "=> #{val}"
     end
   end
 
-  def eval(x)
-    if x.nil?
+  def evaluate(x, env=@global_env)
+    ops = [:+, :*, :-, :/]
+    if x.nil? || env.nil?
       nil
     elsif x.is_a? Symbol
-      @env[x]
+      if env.context[x]
+        env.context[x][0] == :lambda ? "#<procedure>" : env.context[x]
+      end
     elsif x.is_a? Numeric
       x
+    elsif ops.include? x[0]
+      _, *exp = x
+      exp.inject(x[0])
     elsif x[0] == :define
       _, var, exp = x
-      @env[var] = eval(exp)
+      env.context[var] = evaluate(exp)
+    elsif x[0] == :quote
+      _, exp = x
+      to_scheme(exp)
+    elsif x[0] == :lambda
+      puts '#<procedure>'
+      x
+    else
+      var, *arg = x
+      param = env.context[x[0]][1]
+      proc = env.context[x[0]][2]
+
+      new = nil
+      param.each do |n|
+        new = proc.map do |p|
+          p == n ? p = arg[param.index(n)] : p
+        end
+      end
+
+      evaluate(new)
     end
   end
 
   def parse(s)
-    read(s)
-  end
-
-  def read(s)
   	read_from(tokenize(s))
   end
 
@@ -37,13 +71,15 @@ class Shimmer
   end
 
   def read_from(tokens)
-  	nil if tokens.length == 0
+  	return nil if tokens.length == 0
 
   	token = tokens.shift
 
   	if token == '('
   		l = []
-  		l << read_from(tokens) while tokens[0] != ')'
+      while tokens[0] != ')'
+    		l << read_from(tokens)
+      end
   		tokens.shift
   		l
   	elsif token == ')'
@@ -63,5 +99,3 @@ class Shimmer
     end
   end
 end
-
-Shimmer.new.repl
