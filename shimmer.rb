@@ -17,7 +17,17 @@ end
 class Shimmer
   attr_accessor :global_env
   def initialize
-    @global_env = (Env.new)
+    @global_env = Env.new
+    add_globals
+  end
+
+  def add_globals
+    @global_env.context.update({
+      cons: lambda { |x, y| y.unshift(x) }, car: lambda { |x| x[0] }, cdr: lambda { |x| x.shift },
+      :+ => lambda { |x, y| x + y }, :* => lambda { |x, y| x * y }, :- => lambda { |x, y| x - y },
+      :/ => lambda { |x, y| x / y }, :** => lambda { |x, y| x ** y }, :< => lambda { |x, y| x < y },
+      :> => lambda { |x, y| x > y }
+      })
   end
 
   def to_scheme(exp)
@@ -47,16 +57,15 @@ class Shimmer
   end
 
   def evaluate(x, env=@global_env)
-    ops = [:+, :*, :-, :/, :**, :<, :>]
     if x.is_a? Numeric
       x
     elsif x.is_a? Symbol
       env.find(x).context[x] unless env.find(x).nil?
-    elsif ops.include? x[0]
-      _, exp1, exp2 = x
-      evaluate(exp1).send(x[0], evaluate(exp2))
     elsif x == :null
       nil
+    elsif x[0] == :cons
+      _, exp1, exp2 = x
+      to_scheme(exp2.unshift(exp1))
     elsif x[0] == :quote
       _, exp = x
       to_scheme(exp)
@@ -69,6 +78,10 @@ class Shimmer
     elsif x[0] == :if
       _, test, conseq, alt = x
       evaluate(test) ? evaluate(conseq) : evaluate(alt)
+    else
+      exps = x.map { |exp| evaluate(exp) }
+      proc = exps.shift
+      proc.call(*exps)
     end
   end
 
