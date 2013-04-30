@@ -1,21 +1,41 @@
-require 'minitest/autorun'
-
 class Env
   attr_accessor :context, :parent
   def initialize(parent=nil)
     @parent = parent
     @context = {}
   end
+
+  def find(var)
+    if @context.include? var
+      self
+    else
+      @parent.find(var) unless @parent.nil?
+    end
+  end
 end
 
 class Shimmer
   attr_accessor :global_env
   def initialize
-    @global_env = Env.new
+    @global_env = (Env.new)
   end
 
   def to_scheme(exp)
-    '(' + exp.join(" ") + ')'
+    case exp
+    when TrueClass then '#t'
+    when FalseClass then '#f'
+    else
+      list = ' ('
+      exp.each do |n|
+        if n.is_a? Array
+          list << to_scheme(n)
+        else
+          list << "#{n.to_s} "
+        end
+      end
+      list << ') '
+      list.gsub!(' )', ')').strip!
+    end
   end
 
   def repl
@@ -27,40 +47,28 @@ class Shimmer
   end
 
   def evaluate(x, env=@global_env)
-    ops = [:+, :*, :-, :/]
-    if x.nil? || env.nil?
-      nil
-    elsif x.is_a? Symbol
-      if env.context[x]
-        env.context[x][0] == :lambda ? "#<procedure>" : env.context[x]
-      end
-    elsif x.is_a? Numeric
+    ops = [:+, :*, :-, :/, :**, :<, :>]
+    if x.is_a? Numeric
       x
+    elsif x.is_a? Symbol
+      env.find(x).context[x] unless env.find(x).nil?
     elsif ops.include? x[0]
-      _, *exp = x
-      exp.inject(x[0])
-    elsif x[0] == :define
-      _, var, exp = x
-      env.context[var] = evaluate(exp)
+      _, exp1, exp2 = x
+      evaluate(exp1).send(x[0], evaluate(exp2))
+    elsif x == :null
+      nil
     elsif x[0] == :quote
       _, exp = x
       to_scheme(exp)
-    elsif x[0] == :lambda
-      puts '#<procedure>'
-      x
-    else
-      var, *arg = x
-      param = env.context[x[0]][1]
-      proc = env.context[x[0]][2]
-
-      new = nil
-      param.each do |n|
-        new = proc.map do |p|
-          p == n ? p = arg[param.index(n)] : p
-        end
-      end
-
-      evaluate(new)
+    elsif x[0] == :set! #Not entirely sure this works properly. Need to revisit
+      _, var, exp = x
+      env.find(var).context[var] = evaluate(exp)
+    elsif x[0] == :define
+      _, var, exp = x
+      env.context[var] = evaluate(exp)
+    elsif x[0] == :if
+      _, test, conseq, alt = x
+      evaluate(test) ? evaluate(conseq) : evaluate(alt)
     end
   end
 
@@ -79,7 +87,7 @@ class Shimmer
 
   	if token == '('
   		l = []
-      while tokens[0] != ')'
+      until tokens[0] == ')'
     		l << read_from(tokens)
       end
   		tokens.shift
@@ -99,39 +107,5 @@ class Shimmer
     rescue ArgumentError
       token.to_sym
     end
-  end
-end
-
-class ShimmerTest < MiniTest::Unit::TestCase
-  def test_define_var_num_1
-    program = "(define x 4)"
-    s = Shimmer.new
-    assert_equal(4, s.evaluate(s.parse(program)))
-  end
-
-  def test_define_var_num_2
-    program = "(define x 4)"
-    s = Shimmer.new
-    s.evaluate(s.parse(program))
-    input = "x"
-    assert_equal(4, s.evaluate(s.parse(input)))
-  end
-
-  def test_quote
-    program = "(quote (x + y))"
-    s = Shimmer.new
-    assert_equal("(x + y)", s.evaluate(s.parse(program)))
-  end
-
-  def test_undefined_variable
-    program = "x"
-    s = Shimmer.new
-    assert_nil(s.evaluate(s.parse(program)))
-  end
-
-  def test_string_literal
-    program = "8"
-    s = Shimmer.new
-    assert_equal(8, s.evaluate(s.parse(program)))
   end
 end
